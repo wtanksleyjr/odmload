@@ -1,0 +1,6 @@
+[submodule "odmpy-ng"]
+	path = odmpy-ng
+	url = git@github.com:wtanksleyjr/odmpy-ng.git
+[submodule "odmpy"]
+	path = odmpy
+	url = git@github.com:wtanksleyjr/odmpy.git
