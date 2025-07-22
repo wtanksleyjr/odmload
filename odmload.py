@@ -66,46 +66,14 @@ def build_docker(download_base: Path) -> dict[str, str]:
     env["HOST_GID"] = str(GID)
     env["DOWNLOAD_BASE"] = str(download_base)
     env["COMPOSE_BAKE"] = "true"
-    base_image = "selenium/standalone-chrome"
 
-    # Use a pinned base image, update the pin once a day.
-    needs_build = False
-    full_image = base_image
-    image_pin = Path('.') / 'image.pin'
-    if image_pin.is_file():
-        with image_pin.open('r') as f:
-            full_image = f.read().strip()
-    # If there's no pinned image or it's older than a day, pull the latest.
-    if full_image == base_image or not '@' in full_image or time.time() - image_pin.stat().st_mtime > 24*60*60:
-        print("Pulling base image...")
-        res = subprocess.call(f'docker pull {base_image}', shell=True)
-        if res != 0:
-            print(f"Error pulling {base_image}: {res}")
-            sys.exit(1)
-        # Having pulled the latest image (which may not be changed!), record the digest.
-        digest = subprocess.check_output(
-            [ "docker", "inspect", "--format={{index .RepoDigests 0}}", base_image ],
-            text=True).strip()
-        if not '@' in digest:
-            print(f"Error parsing digest for {base_image}: {digest}")
-            sys.exit(1)
-        if digest != full_image:
-            needs_build = True
-            full_image = digest
-        # Update the pinning file, so timestamp shows.
-        with image_pin.open('w') as f:
-            f.write(digest)
-
-    # Extract the "pin", which is the @sha256 part of the digest.
-    env["SELENIUM_SHA"] = '@' + full_image.split('@')[1]
-
-    print(f"Using image: {full_image}.")
-    if needs_build:
-        print("Building odmpy-ng image...")
-        res = subprocess.call('docker compose build odmpy-ng', shell=True, env=env)
-        if res != 0:
-            print(f"Error building odmpy-ng: {res}")
-            sys.exit(1)
+    # Have odmpy-ng run build-compose.py to make its docker image.
+    res = subprocess.check_output(f'./build-compose.py', shell=True, text=True, env=env, cwd='./odmpy-ng')
+    lastline = res.splitlines()[-1]
+    if not lastline.startswith('@'):
+        print(f"Error running build-compose.py, output: {res}")
+        sys.exit(1)
+    env["SELENIUM_SHA"] = lastline
 
     return env
 
@@ -116,7 +84,6 @@ def main():
 
     # options
     args = argparse.ArgumentParser()
-    args.add_argument('--build-only', action='store_true', help='Run docker compose build for odmpy-ng, do nothing else.')
     args.add_argument('-l', '--libby', help='full name for libby json file', default=libby_loc)
     args.add_argument(
         '-d', '--dest',
@@ -135,18 +102,22 @@ def main():
 
     if not opts.dest:
         print("Error: no destination directory specified")
+        args.print_help()
         sys.exit(1)
 
-    download_base = Path(opts.dest)
-
-    env = build_docker(download_base)
-    if opts.build_only:
-        sys.exit(0)
+    try:
+        download_base = Path(opts.dest).absolute().resolve()
+    except ValueError:
+        print(f"Error: {opts.dest} is not a valid path")
+        args.print_help()
+        sys.exit(1)
 
     libby_dest = download_base / 'libby'
     if not libby_dest.is_dir():
         print(f"Warning: libby path {libby_dest} is not a directory, attempting to create")
         libby_dest.mkdir(parents=True)
+
+    env = build_docker(download_base)
 
     data = load_libby()
     unrecorded = []
@@ -185,7 +156,7 @@ def main():
             # Stream output live and collect it
             proc = subprocess.Popen(f"docker compose run --rm odmpy-ng -s={book.site_id} -i={book.ID} -n=libby/{book.ID} -r",
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1,
-                                shell=True, text=True, env=env)
+                                cwd='./odmpy-ng', shell=True, text=True, env=env)
             if proc is None or proc.stdout is None or proc.stderr is None:
                 print("Error downloading book {book.ID}, {book.title}: unable to start docker subprocess.")
                 continue
