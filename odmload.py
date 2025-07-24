@@ -56,7 +56,7 @@ def making_progress(base: Path, book: Book, verbose: bool = False, only_check_pr
             f.write('\n'.join(older_files))
     return progress
 
-def build_docker(download_base: Path) -> dict[str, str]:
+def build_docker(download_base: Path, tmp_base: Path) -> dict[str, str]:
     # Set up environment for docker run.
     UID = os.getuid()
     GID = os.getgid()
@@ -65,6 +65,7 @@ def build_docker(download_base: Path) -> dict[str, str]:
     env["HOST_UID"] = str(UID)
     env["HOST_GID"] = str(GID)
     env["DOWNLOAD_BASE"] = str(download_base)
+    env["TMP_BASE"] = str(tmp_base)
     env["COMPOSE_BAKE"] = "true"
 
     # Have odmpy-ng run build-compose.py to make its docker image.
@@ -81,6 +82,9 @@ def main():
     global libby_loc
     
     default_dest = os.getenv('AUDIOBOOK_FOLDER', None)
+    default_tmp = os.getenv('TMP_BASE', None)
+    if not default_tmp and default_dest:
+        default_tmp = Path(default_dest) / 'tmp'
 
     # options
     args = argparse.ArgumentParser()
@@ -90,6 +94,12 @@ def main():
         type=str,
         default=default_dest,
         help=f'Directory under which files will be finally stored (default: AUDIOBOOK_FOLDER environment variable={default_dest})'
+    )
+    args.add_argument(
+        '-t', '--tmp',
+        type=str,
+        default=default_tmp,
+        help=f'Directory under which temporary files will be stored (default: TMP_BASE environment variable or dest/tmp)'
     )
 
     # parse
@@ -101,12 +111,20 @@ def main():
         sys.exit(1)
 
     if not opts.dest:
-        print("Error: no destination directory specified")
-        args.print_help()
+        print("Error: no destination directory specified, use -d or AUDIOBOOK_FOLDER environment variable")
+        sys.exit(1)
+    if not opts.tmp:
+        print("Error: no temporary directory specified, use -t or TMP_BASE environment variable")
         sys.exit(1)
 
     try:
         download_base = Path(opts.dest).absolute().resolve()
+    except ValueError:
+        print(f"Error: {opts.dest} is not a valid path")
+        args.print_help()
+        sys.exit(1)
+    try:
+        tmp_base = Path(opts.tmp).absolute().resolve()
     except ValueError:
         print(f"Error: {opts.dest} is not a valid path")
         args.print_help()
@@ -117,7 +135,7 @@ def main():
         print(f"Warning: libby path {libby_dest} is not a directory, attempting to create")
         libby_dest.mkdir(parents=True)
 
-    env = build_docker(download_base)
+    env = build_docker(download_base, tmp_base)
 
     data = load_libby()
     unrecorded = []
@@ -136,7 +154,7 @@ def main():
         sys.exit(0)
 
     for book in unrecorded:
-        tmp_folder = download_base / 'tmp' / book.ID
+        tmp_folder = tmp_base / book.ID
         bad_marker = tmp_folder / 'bad'
         if bad_marker.is_file():
             print(f"Skipping book due to 'bad' flag (delete to retry): {book.title}: {bad_marker}")
