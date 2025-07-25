@@ -1,6 +1,8 @@
 [submodule "odmpy-ng"]
 	path = odmpy-ng
 	url = git@github.com:wtanksleyjr/odmpy-ng.git
+	ignore = untracked
 [submodule "odmpy"]
 	path = odmpy
 	url = git@github.com:wtanksleyjr/odmpy.git
+	ignore = untracked
