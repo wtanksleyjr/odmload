@@ -83,8 +83,6 @@ def main():
     
     default_dest = os.getenv('AUDIOBOOK_FOLDER', None)
     default_tmp = os.getenv('TMP_BASE', None)
-    if not default_tmp and default_dest:
-        default_tmp = Path(default_dest) / 'tmp'
 
     # options
     args = argparse.ArgumentParser()
@@ -99,7 +97,7 @@ def main():
         '-t', '--tmp',
         type=str,
         default=default_tmp,
-        help=f'Directory under which temporary files will be stored (default: TMP_BASE environment variable or dest/tmp)'
+        help=f'Directory under which temporary files will be stored, TMP_BASE={default_tmp} will be used if not set (default: dest/tmp)'
     )
 
     # parse
@@ -114,8 +112,11 @@ def main():
         print("Error: no destination directory specified, use -d or AUDIOBOOK_FOLDER environment variable")
         sys.exit(1)
     if not opts.tmp:
-        print("Error: no temporary directory specified, use -t or TMP_BASE environment variable")
-        sys.exit(1)
+        if not default_tmp and default_dest:
+            default_tmp = Path(default_dest) / 'tmp'
+        else:
+            print("Error: no temporary directory specified, use -t or TMP_BASE environment variable")
+            sys.exit(1)
 
     try:
         download_base = Path(opts.dest).absolute().resolve()
