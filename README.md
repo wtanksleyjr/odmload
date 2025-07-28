@@ -17,13 +17,12 @@ your own libraries. As I mentioned, you will need to be able to log in; this is
 usually something simple like your library card number and the last 4-5 digits
 of your phone number, but your library staff will help you.
 
-Make sure you have Docker, Docker Compose, and Python installed.
-These instructions will assume you're using a Git supported command line; if
-you're using Windows, you may want to use the Git Bash command line. I'll wait
-for you to get that all done, and my apologies that you may have to dig a bit.
+Make sure you have Docker, Docker Compose, and Python installed. These
+instructions will assume you're using a Git supported command line; if you're
+using Windows, you may want to use the Git Bash command line. I'll wait for you
+to get that all done, and my apologies that you may have to dig a bit.
 
-Clone this repository into a directory of your choice. Github has a
-guide.
+Clone this repository into a directory of your choice. Github has a guide.
 
 And finally for setting up your machine, pick a place to store the books after
 they're downloaded, and a place to store them while they're being downloaded. I
@@ -36,7 +35,7 @@ with each book stored in a directory named only with its Libby ID (a simple way
 to keep book folders short and unique - I am open to contributions of code with
 better suggestions). Naturally, this means if you are using an audiobook
 manager you will need to give it metadata since it's not in the folder
-structure. I have implemented Audiobookshelf metadata and as before I'm open to
+structure. I have implemented Audiobookshelf metadata and (as before) I'm open to
 taking code contributions for other systems like Plex or Jellyfin.
 
 NOTE: although Libby can report when loans are due, this program does not
@@ -52,16 +51,15 @@ as well as odmpy-ng, which can actually fetch the books.
 git submodule update --init --recursive
 ```
 
-Use pip to install odmpy from the submodule of the same name. (Skip this if you
-already have odmpy installed and working - feel free to delete this subfolder.)
+Use pip to install odmpy from the submodule of the same name. Even if you have
+a patched version running this update is needed to get library websiteIds.
 ```bash
 python3 -m pip install ./odmpy
 ```
 
-Unless odmpy is already installed and working, you'll now need your Libby
-authentication code. Open a browser and go to your own Libby config page and
-choose "Copy to another device", then choose one of the devices listed, either
-Sonos or Android will work, [and here's a
+You'll now need your Libby authentication code. Open a browser and go to your
+own Libby config page and choose "Copy to another device", then choose one of
+the devices listed, either Sonos or Android will work, [and here's a
 link](https://libbyapp.com/interview/authenticate/setup-code#enterCode).
 
 With that code in mind, run odmpy to get the list of books you have checked
@@ -76,15 +74,24 @@ odmpy libby --reset
 odmpy libby
 ```
 
-Next, create a config file for odmpy-ng. Add in all of your library websites,
-of the form https://yourlibrary.overdrive.com, that you have in Libby. You may
-also want to set some of the encoding options, I always get all of the extra
-metadata, and I also prefer to skip reencoding because it takes a long time (so
-that's the least tested part for me).
+Next, create a config file for odmpy-ng. If you've run odmpy-ng on its own
+before, you'll want to copy the config file from the previous run; put it into
+odmpy-ng/config/config.json. Don't worry if you don't have one.
+
+The next step will write to odmpy-ng/config/config.json, so if you have
+something there, make sure you have a safe copy.
+
+Next, we'll run the configuration tool:
 ```bash
-cp odmpy-ng/config/config.example.json odmpy-ng/config/config.json
-vi odmpy-ng/config/config.json
+./odmload.py configure
 ```
 
-TODO: document how I check out books and use them to get the site-id
+Once that finishes, edit odmpy-ng/config/config.json and make sure you set the
+login pins for each library (your librarians should be helpful here). Also, you
+may also want to set some of the encoding options, I always get all of the
+extra metadata, and I also prefer to skip reencoding because it takes a long
+time (so that's the least tested part for me).
+
+We're almost there. Now prepare two folders; one a temporary folder for in-progress
+downloads, and one for completed downloads. 
 
