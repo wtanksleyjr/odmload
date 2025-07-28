@@ -45,6 +45,8 @@ def making_progress(tmp_folder: Path, dl_folder: Path, book: Book, verbose: bool
     progress = False
     if not tmp_folder.is_dir():
         return True
+    if dl_folder.is_dir() and len(list(dl_folder.glob('*.mp3'))) > 0:
+        return True
     older_files = []
     older = tmp_folder / 'older.files'
     if older.is_file():
@@ -112,23 +114,24 @@ def generate_config(config_path: Path, cards: list[Card]):
             added_options += 1
             config[key] = config_baseline[key]
 
-    older = {lib['name'].lower():lib for lib in config['libraries']}
+    older = {lib['url'].lower():lib for lib in config['libraries']}
     config['libraries'] = libs = []
     unintialized = 'replace_this_with_quoted_pin'
     added_libraries = 0
     updated_libraries = 0
     for card in cards:
         lib = dict()
-        if (o := older.get(card.name.lower())) and 'pin' in o and o['pin'] != unintialized:
+        url = f'https://{card.name}.overdrive.com'.lower()
+        if (o := older.get(url)) and 'pin' in o and o['pin'] != unintialized:
             if 'site-id' not in o or o['site-id'] != card.site_id:
                 updated_libraries += 1
                 o['site-id'] = card.site_id
             lib = o
-            del older[card.name.lower()]
+            del older[url]
         else:
             added_libraries += 1
             lib['name'] = card.name.upper()
-            lib['url'] = f'https://{card.name}.overdrive.com'
+            lib['url'] = url
             lib['card_number'] = card.username
             lib['pin'] = unintialized
             lib['site-id'] = card.site_id
