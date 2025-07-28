@@ -25,6 +25,25 @@ for you to get that all done, and my apologies that you may have to dig a bit.
 Clone this repository into a directory of your choice. Github has a
 guide.
 
+And finally for setting up your machine, pick a place to store the books after
+they're downloaded, and a place to store them while they're being downloaded. I
+use Audiobookshelf, so I was able to simply use that for the final path. You will
+want it to have enough space for the number of books you typically have checked
+out at a time.
+
+Books downloaded will be placed in the download directory under a subdirectory "libby",
+with each book stored in a directory named only with its Libby ID (a simple way
+to keep book folders short and unique - I am open to contributions of code with
+better suggestions). Naturally, this means if you are using an audiobook
+manager you will need to give it metadata since it's not in the folder
+structure. I have implemented Audiobookshelf metadata and as before I'm open to
+taking code contributions for other systems like Plex or Jellyfin.
+
+NOTE: although Libby can report when loans are due, this program does not
+currently implement automatic deletion of due books. You are responsible for
+complying with the terms of service, and I have tagged the books as "Odmpy-NG"
+to make that easy to do.
+
 Run the following command to get the current tested versions of the two
 dependencies this uses. This will be a patched version of odmpy, which
 correctly logs into libby and can get the list of books you have checked out;
@@ -34,14 +53,15 @@ git submodule update --init --recursive
 ```
 
 Use pip to install odmpy from the submodule of the same name. (Skip this if you
-already have odmpy installed.)
+already have odmpy installed and working - feel free to delete this subfolder.)
 ```bash
 python3 -m pip install ./odmpy
 ```
 
-You'll now need your Libby authentication code. Open a browser and go to your
-own Libby config page and choose "Copy to another device", then choose one of
-the devices listed, either Sonos or Android will work, [and here's a
+Unless odmpy is already installed and working, you'll now need your Libby
+authentication code. Open a browser and go to your own Libby config page and
+choose "Copy to another device", then choose one of the devices listed, either
+Sonos or Android will work, [and here's a
 link](https://libbyapp.com/interview/authenticate/setup-code#enterCode).
 
 With that code in mind, run odmpy to get the list of books you have checked
@@ -52,17 +72,19 @@ list of books.
 Your libby code may time out ... if so, just run it again. No worries.
 
 ```bash
+odmpy libby --reset
 odmpy libby
 ```
 
-Next, create a config file for odmpy-ng. Add in all of your library websites
-you have in Libby. You may also want to set some of the encoding options, I
-always get all of the extra metadata, and I also prefer to skip reencoding
-because it takes a long time (so that's the least tested part for me).
+Next, create a config file for odmpy-ng. Add in all of your library websites,
+of the form https://yourlibrary.overdrive.com, that you have in Libby. You may
+also want to set some of the encoding options, I always get all of the extra
+metadata, and I also prefer to skip reencoding because it takes a long time (so
+that's the least tested part for me).
 ```bash
 cp odmpy-ng/config/config.example.json odmpy-ng/config/config.json
 vi odmpy-ng/config/config.json
 ```
 
-TODO: check out books and use them to get the site-id
+TODO: document how I check out books and use them to get the site-id
 

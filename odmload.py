@@ -6,11 +6,15 @@ import argparse
 import subprocess
 from io import StringIO
 
-
 from pathlib import Path
+from tempfile import gettempdir
 from dataclasses import dataclass
 
-libby_loc = '/tmp/libby.json'
+# Sensible defaults
+tmpdir = Path(gettempdir())
+loans_loc = tmpdir / 'libby-loans.json'
+libby_loc = tmpdir / 'libby-cards.json'
+config_loc = Path('odmpy-ng') / 'config' / 'config.json'
 
 @dataclass
 class Book:
@@ -18,30 +22,38 @@ class Book:
     title: str
     site_id: int
 
-def load_libby():
+@dataclass
+class Card:
+    name: str
+    username: str
+    site_id: int
+
+def load_libby() -> tuple[list[Card], list[dict]]:
     # Run odmpy to get the data, check the return code
-    res = subprocess.call('odmpy libby --exportloans ' + libby_loc, shell=True)
+    res = subprocess.call(f'odmpy libby --exportloans {str(loans_loc)} --exportcards {str(libby_loc)}', shell=True)
     if res != 0:
         print(f"Error running odmpy libby: {res}")
         sys.exit(1)
     with open(libby_loc, 'r') as f:
-        data = json.load(f)
-    return data
+        card_data = json.load(f)
+    cards = [Card(name=n, username=u, site_id=s) for u, n, s in card_data]
+    with open(loans_loc, 'r') as f:
+        loans = json.load(f)
+    return cards, loans
 
-def making_progress(base: Path, book: Book, verbose: bool = False, only_check_previous_run: bool = False) -> bool:
+def making_progress(tmp_folder: Path, dl_folder: Path, book: Book, verbose: bool = False, only_check_previous_run: bool = False) -> bool:
     progress = False
-    path = base / 'tmp' / str(book.ID)
-    if not path.is_dir():
+    if not tmp_folder.is_dir():
         return True
     older_files = []
-    older = path/'older.files'
+    older = tmp_folder / 'older.files'
     if older.is_file():
         with older.open('r') as f:
             older_files = f.read().splitlines()
     if only_check_previous_run:
         return len(older_files) > 0
     header = False
-    for f in os.listdir(base / 'tmp' / str(book.ID)):
+    for f in os.listdir(tmp_folder):
         if not f.endswith('.mp3') or f in older_files:
             continue
         if verbose:
@@ -78,15 +90,74 @@ def build_docker(download_base: Path, tmp_base: Path) -> dict[str, str]:
 
     return env
 
+def generate_config(config_path: Path, cards: list[Card]):
+    config = dict()
+    if config_path.is_file():
+        with config_path.open('r') as f:
+            config = json.load(f)
+        if not 'libraries' in config or not isinstance(config['libraries'], list):
+            print(f"Error: config file {config_path} does not contain libraries list, is this an odmpy-ng config file?")
+            sys.exit(1)
+        print(f"Using existing config file {config_path} with {len(config)} options")
+    config_example = config_path.parent / 'config.example.json'
+    if not config_example.is_file():
+        print(f"Error: config file {config_example} not found")
+        sys.exit(1)
+    with config_example.open('r') as f:
+        config_baseline = json.load(f)
+    added_options = 0
+    del config_baseline['libraries']
+    for key in config_baseline:
+        if key not in config:
+            added_options += 1
+            config[key] = config_baseline[key]
+
+    older = {lib['name'].lower():lib for lib in config['libraries']}
+    config['libraries'] = libs = []
+    unintialized = 'replace_this_with_quoted_pin'
+    added_libraries = 0
+    updated_libraries = 0
+    for card in cards:
+        lib = dict()
+        if (o := older.get(card.name.lower())) and 'pin' in o and o['pin'] != unintialized:
+            if 'site-id' not in o or o['site-id'] != card.site_id:
+                updated_libraries += 1
+                o['site-id'] = card.site_id
+            lib = o
+            del older[card.name.lower()]
+        else:
+            added_libraries += 1
+            lib['name'] = card.name.upper()
+            lib['url'] = f'https://{card.name}.overdrive.com'
+            lib['card_number'] = card.username
+            lib['pin'] = unintialized
+            lib['site-id'] = card.site_id
+        libs.append(lib)
+
+    if older:
+        print(f"WARNING: The following libraries are in the config file but not in libby: {', '.join(older.keys())}")
+        # Add the older libraries so they don't get lost.
+        libs.extend(older.values())
+
+    if added_options or added_libraries:
+        encoded = json.dumps(config, indent=4)
+        print(f"Generated config file with {len(config)-1} options and {len(libs)} libraries")
+        print(f"{added_options} new options, {added_libraries} new libraries added, {updated_libraries} libraries given correct site-id")
+        if unintialized in encoded:
+            print(f"WARNING: Please edit {config_path} to replace {unintialized} with actual pin")
+        with config_path.open('w') as f:
+            f.write(encoded)
+    else:
+        print(f"Keeping existing config file {config_path} with {len(config)} options and {len(libs)} libraries")
+
 def main():
-    global libby_loc
+    global libby_loc, loans_loc
     
     default_dest = os.getenv('AUDIOBOOK_FOLDER', None)
     default_tmp = os.getenv('TMP_BASE', None)
 
     # options
     args = argparse.ArgumentParser()
-    args.add_argument('-l', '--libby', help='full name for libby json file', default=libby_loc)
     args.add_argument(
         '-d', '--dest',
         type=str,
@@ -97,26 +168,43 @@ def main():
         '-t', '--tmp',
         type=str,
         default=default_tmp,
-        help=f'Directory under which temporary files will be stored, TMP_BASE={default_tmp} will be used if not set (default: dest/tmp)'
+        help=f'Directory under which temporary files will be stored, TMP_BASE={default_tmp} will be used if not set'
     )
+    # Add an optional argument to generate the odmpy-ng config file.
+    args.add_argument('configure', type=str, help='supress run, generate odmpy-ng configuration instead', default=None, nargs='?')
 
     # parse
     opts = args.parse_args()
-    libby_loc = opts.libby
 
-    if not libby_loc or not Path(libby_loc).is_file():
-        print(f"Error: {libby_loc} is not a file")
+    cards, books = load_libby()
+
+    if opts.configure is not None:
+        print(f"Generating odmpy-ng configuration to file {opts.configure}")
+        generate_config(Path(config_loc), cards)
+        sys.exit(0)
+
+    try:
+        with open(config_loc, 'r') as f:
+            ng_libraries = json.load(f)['libraries']
+        site_ids = {lib['site-id'] for lib in ng_libraries if 'site-id' in lib}
+    except ValueError:
+        print(f"Error: odmpy-ng config file {config_loc} is not valid JSON or is missing fields, use 'odmload configure' to generate")
         sys.exit(1)
+
+    if not site_ids:
+        print(f"Error: odmpy-ng config file {config_loc} has no libraries with site-id, check whether Libby is configured and use 'odmload configure' to generate")
+        sys.exit(1)
+
+    if not books:
+        print(f"No books checked out, nothing to do, exiting.")
+        sys.exit(0)
 
     if not opts.dest:
         print("Error: no destination directory specified, use -d or AUDIOBOOK_FOLDER environment variable")
         sys.exit(1)
     if not opts.tmp:
-        if not default_tmp and default_dest:
-            default_tmp = Path(default_dest) / 'tmp'
-        else:
-            print("Error: no temporary directory specified, use -t or TMP_BASE environment variable")
-            sys.exit(1)
+        print("Error: no temporary directory specified, use -t or TMP_BASE environment variable")
+        sys.exit(1)
 
     try:
         download_base = Path(opts.dest).absolute().resolve()
@@ -138,24 +226,38 @@ def main():
 
     env = build_docker(download_base, tmp_base)
 
-    data = load_libby()
     unrecorded = []
+    missing_books = []
     print(f"Scanning for needed books in {libby_dest}:")
-    for item in data:
+    for item in books:
         ID = item['id']
         title = item['title']
-        site_id = item['websiteId']
+        site_id = int(item['websiteId'])
 
-        if not Path(libby_dest / ID).is_dir():
+        missing_books.append(site_id not in site_ids)
+        if missing_books[-1]:
+            print(f"WARNING: Book {ID} ({title}) has site-id {site_id} which is not in odmpy-ng config file {config_loc}")
+            continue
+
+        dir = libby_dest / ID
+        if not dir.is_dir() or not dir.glob('*.mp3'):
             print(f"  {ID} - {title} ({site_id})")
             unrecorded.append(Book(ID, title, site_id))
 
+    if any(missing_books):
+        print("site-ids:", site_ids)
+        print(f"ERROR: odmpy-ng config file {config_loc} needs to be updated to include site-ids, run 'odmload configure'")
+        # Make it a little more obvious if ALL of the books are unfetchable.
+        if all(missing_books):
+            sys.exit(2)
+
     if not unrecorded:
-        print("Nothing to do, exiting.")
+        print(f"{len(books)} checkedout books scanned but already present, nothing to do, exiting.")
         sys.exit(0)
 
     for book in unrecorded:
         tmp_folder = tmp_base / book.ID
+        dl_folder = download_base / 'libby' / book.ID
         bad_marker = tmp_folder / 'bad'
         if bad_marker.is_file():
             print(f"Skipping book due to 'bad' flag (delete to retry): {book.title}: {bad_marker}")
@@ -163,11 +265,10 @@ def main():
 
         print(f"\nRunning odmpy-ng for book: {book.title}")
 
-        was_previously_run = making_progress(download_base, book, only_check_previous_run=True)
+        was_previously_run = making_progress(tmp_folder, dl_folder, book, only_check_previous_run=True)
         res = -1
         # Using try/finally to handle things like ctrl-c. Include a timeout.
         out_buf = StringIO()
-        err_buf = StringIO()
         start_time = time.time()
         proc = None
 
@@ -211,7 +312,7 @@ def main():
             else:
                 print("Error downloading book {book.ID}, {book.title}: no subprocess started.")
 
-            made_progress = making_progress(download_base, book, verbose=True)
+            made_progress = making_progress(tmp_folder, dl_folder, book, verbose=True)
             if res != 0 or not made_progress:
                 print(f"Error running odmpy-ng for book {book.ID}, {book.title}: {res} ",
                       ("no progress made" if not made_progress else ""))
