@@ -93,5 +93,21 @@ extra metadata, and I also prefer to skip reencoding because it takes a long
 time (so that's the least tested part for me).
 
 We're almost there. Now prepare two folders; one a temporary folder for in-progress
-downloads, and one for completed downloads. 
+downloads, and one for completed downloads. I simply point this app to the same folder
+all of my Audibookshelf collections are in; because this app saves each book in a path
+that looks like `libby/<id>/...`, the Libby books don't get mixed up with other sources.
+
+```bash
+export AUDIOBOOK_TMP=/your/path/to/a/folder
+export AUDIOBOOK_FOLDER=/a/path/to/plenty/of/space
+```
+
+Go to libby and check out some books. Run the app and it will download them! If
+the download works, it'll show up in your download folder. If something goes
+wrong, it'll keep the files in your tmp folder, including a log file. It'll try
+again the next time you run it, but if it fails twice in a row, it'll give up
+and mark the tmp folder with a file named `bad`.
+```bash
+./odmload.py
+```
 

@@ -78,8 +78,8 @@ def build_docker(download_base: Path, tmp_base: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["HOST_UID"] = str(UID)
     env["HOST_GID"] = str(GID)
-    env["DOWNLOAD_BASE"] = str(download_base)
-    env["TMP_BASE"] = str(tmp_base)
+    env["AUDIOBOOK_FOLDER"] = str(download_base)
+    env["AUDIOBOOK_TMP"] = str(tmp_base)
     env["COMPOSE_BAKE"] = "true"
 
     # Have odmpy-ng run build-compose.py to make its docker image.
@@ -157,7 +157,7 @@ def main():
     global libby_loc, loans_loc
     
     default_dest = os.getenv('AUDIOBOOK_FOLDER', None)
-    default_tmp = os.getenv('TMP_BASE', None)
+    default_tmp = os.getenv('AUDIOBOOK_TMP', None)
 
     # options
     args = argparse.ArgumentParser()
@@ -171,7 +171,7 @@ def main():
         '-t', '--tmp',
         type=str,
         default=default_tmp,
-        help=f'Directory under which temporary files will be stored, TMP_BASE={default_tmp} will be used if not set'
+        help=f'Directory under which temporary files will be stored, AUDIOBOOK_TMP environment variable={default_tmp} will be used if not set'
     )
     # Add an optional argument to generate the odmpy-ng config file.
     args.add_argument('configure', type=str, help='supress run, generate odmpy-ng configuration instead', default=None, nargs='?')
@@ -206,7 +206,7 @@ def main():
         print("Error: no destination directory specified, use -d or AUDIOBOOK_FOLDER environment variable")
         sys.exit(1)
     if not opts.tmp:
-        print("Error: no temporary directory specified, use -t or TMP_BASE environment variable")
+        print("Error: no temporary directory specified, use -t or AUDIOBOOK_TMP environment variable")
         sys.exit(1)
 
     try:
