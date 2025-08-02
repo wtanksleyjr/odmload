@@ -45,7 +45,7 @@ def making_progress(tmp_folder: Path, dl_folder: Path, book: Book, verbose: bool
     progress = False
     if not tmp_folder.is_dir():
         return True
-    if dl_folder.is_dir() and len(list(dl_folder.glob('*.mp3'))) > 0:
+    if dl_folder.is_dir() and any(dl_folder.glob('*.mp3')):
         return True
     older_files = []
     older = tmp_folder / 'older.files'
@@ -243,7 +243,7 @@ def main():
             continue
 
         dir = libby_dest / ID
-        if not dir.is_dir() or not dir.glob('*.mp3'):
+        if not dir.is_dir() or not any(dir.glob('*.mp3')):
             print(f"  {ID} - {title} ({site_id})")
             unrecorded.append(Book(ID, title, site_id))
 
