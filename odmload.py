@@ -36,7 +36,7 @@ def load_libby() -> tuple[list[Card], list[dict]]:
         sys.exit(1)
     with open(libby_loc, 'r') as f:
         card_data = json.load(f)
-    cards = [Card(name=n, username=u, site_id=s) for u, n, s in card_data]
+    cards = [Card(name=c["advantageKey"], username=c["cardName"], site_id=int(c["library"]["websiteId"])) for c in card_data]
     with open(loans_loc, 'r') as f:
         loans = json.load(f)
     return cards, loans
