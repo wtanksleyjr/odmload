@@ -121,16 +121,25 @@ def generate_config(config_path: Path, cards: list[Card]):
     updated_libraries = 0
     for card in cards:
         lib = dict()
-        url = f'https://{card.name}.overdrive.com'.lower()
-        if (o := older.get(url)) and 'pin' in o and o['pin'] != unintialized:
-            if 'site-id' not in o or o['site-id'] != card.site_id:
-                updated_libraries += 1
-                o['site-id'] = card.site_id
+        name = card.name.lower()
+        url = f'https://{name}.overdrive.com'.lower()
+        suffix = name.split('-', 1)[-1] if '-' in name else None
+        o = older.get(url)
+        if o and 'pin' in o and o['pin'] != unintialized:
             lib = o
             del older[url]
+            if 'site-id' not in lib or lib['site-id'] != card.site_id:
+                updated_libraries += 1
+                lib['site-id'] = card.site_id
+            if suffix and not lib.get('subsite'):
+                print(name, suffix)
+                updated_libraries += 1
+                lib['subsite'] = suffix
         else:
             added_libraries += 1
-            lib['name'] = card.name.upper()
+            lib['name'] = name
+            if suffix:
+                lib['subsite'] = suffix
             lib['url'] = url
             lib['card_number'] = card.username
             lib['pin'] = unintialized
@@ -142,7 +151,7 @@ def generate_config(config_path: Path, cards: list[Card]):
         # Add the older libraries so they don't get lost.
         libs.extend(older.values())
 
-    if added_options or added_libraries:
+    if added_options or added_libraries or updated_libraries:
         encoded = json.dumps(config, indent=4)
         print(f"Generated config file with {len(config)-1} options and {len(libs)} libraries")
         print(f"{added_options} new options, {added_libraries} new libraries added, {updated_libraries} libraries given correct site-id")
