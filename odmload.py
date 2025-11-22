@@ -263,9 +263,10 @@ def main():
         print(f"---------------------------------------------------------------")
 
     IDs_in_tmp = {fn.name for fn in tmp_base.iterdir() if fn.is_dir()}
+    IDs_in_both = {ID for ID in IDs_in_tmp if (final:=(libby_dest / ID)).is_dir() and any(final.glob('*.mp3'))}
+    IDs_in_tmp -= IDs_in_both
     for book in unrecorded:
         tmp_folder = tmp_base / book.ID
-        dl_folder = download_base / 'libby' / book.ID
         bad_marker = tmp_folder / 'bad'
         mp3s_text = (tmp_folder.is_dir() and len(set(tmp_folder.glob('*.mp3')))) or "no"
         if bad_marker.is_file():
@@ -277,7 +278,7 @@ def main():
     if IDs_in_tmp:
         print(f"---------------------------------------------------------------")
         # These are possibly expired from Libby checkout.
-        # TODO: could probably work harder to keep metadata.
+        # TODO: should download metadata first instead of waiting for whole book to be downloaded.
         for ID in IDs_in_tmp:
             tmp_folder = tmp_base / ID
             mp3s_text = len(set(tmp_folder.glob('*.mp3'))) or "no"
