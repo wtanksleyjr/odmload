@@ -236,11 +236,13 @@ def main():
         print(f"Warning: libby path {libby_dest} is not a directory, attempting to create")
         libby_dest.mkdir(parents=True)
 
+    # TODO: this doesn't display its output until complete, figure out why.
+    # Note that the regular run DOES display, so I have a working solution.
     env = build_docker(download_base, tmp_base)
 
     unrecorded = []
     missing_books = []
-    print(f"Scanning for needed books in {libby_dest}:")
+    print(f"Scanning for needed books in {libby_dest} and {tmp_base}:")
     for item in books:
         ID = item['id']
         title = item['title']
@@ -253,8 +255,33 @@ def main():
 
         dir = libby_dest / ID
         if not dir.is_dir() or not any(dir.glob('*.mp3')):
-            print(f"  {ID} - {title} ({site_id})")
             unrecorded.append(Book(ID, title, site_id))
+        else:
+            print(f"  {ID} - {title} ({site_id}) already in libby path")
+
+    if unrecorded:
+        print(f"---------------------------------------------------------------")
+
+    IDs_in_tmp = {fn.name for fn in tmp_base.iterdir() if fn.is_dir()}
+    for book in unrecorded:
+        tmp_folder = tmp_base / book.ID
+        dl_folder = download_base / 'libby' / book.ID
+        bad_marker = tmp_folder / 'bad'
+        mp3s_text = (tmp_folder.is_dir() and len(set(tmp_folder.glob('*.mp3')))) or "no"
+        if bad_marker.is_file():
+            print(f"  {book.ID} - {book.title} ({book.site_id}) - in progress with {mp3s_text} mp3s found, marked bad but will keep trying.")
+        else:
+            print(f"  {book.ID} - {book.title} ({book.site_id}) - in progress with {mp3s_text} mp3s.")
+        IDs_in_tmp.discard(book.ID)
+
+    if IDs_in_tmp:
+        print(f"---------------------------------------------------------------")
+        # These are possibly expired from Libby checkout.
+        # TODO: could probably work harder to keep metadata.
+        for ID in IDs_in_tmp:
+            tmp_folder = tmp_base / ID
+            mp3s_text = len(set(tmp_folder.glob('*.mp3'))) or "no"
+            print(f"  {ID} - no longer present in Libby data - {mp3s_text} mp3s, cannot continue.")
 
     if any(missing_books):
         print("site-ids:", site_ids)
@@ -267,15 +294,12 @@ def main():
         print(f"{len(books)} checkedout books scanned but already present, nothing to do, exiting.")
         sys.exit(0)
 
+    print(f"====================== Beginning run =======================")
+
     for book in unrecorded:
+        print(f"\nRunning odmpy-ng for book: {book.title}")
         tmp_folder = tmp_base / book.ID
         dl_folder = download_base / 'libby' / book.ID
-        bad_marker = tmp_folder / 'bad'
-        if bad_marker.is_file():
-            print(f"Skipping book due to 'bad' flag (delete to retry): {book.title}: {bad_marker}")
-            continue
-
-        print(f"\nRunning odmpy-ng for book: {book.title}")
 
         was_previously_run = making_progress(tmp_folder, dl_folder, book, only_check_previous_run=True)
         res = -1
