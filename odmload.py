@@ -177,6 +177,17 @@ def main():
         help=f'Directory under which files will be finally stored (default: AUDIOBOOK_FOLDER environment variable={default_dest})'
     )
     args.add_argument(
+        '--chapters',
+        action='store_true',
+        default=False,
+        help='Download chapter metadata instead of books'
+    )
+    args.add_argument(
+        '--all',
+        action='store_true',
+        help='Download all books, even if they are already downloaded'
+    )
+    args.add_argument(
         '-t', '--tmp',
         type=str,
         default=default_tmp,
@@ -240,7 +251,7 @@ def main():
     # Note that the regular run DOES display, so I have a working solution.
     env = build_docker(download_base, tmp_base)
 
-    unrecorded = []
+    processable = []
     missing_books = []
     print(f"Scanning for needed books in {libby_dest} and {tmp_base}:")
     for item in books:
@@ -254,18 +265,26 @@ def main():
             continue
 
         dir = libby_dest / ID
-        if not dir.is_dir() or not any(dir.glob('*.mp3')):
-            unrecorded.append(Book(ID, title, site_id))
+        tmp_dir = tmp_base / ID
+        if opts.all or not dir.is_dir() or not any(dir.glob('*.mp3')):
+            if opts.chapters and (tmp_dir/'chs.json').is_file():
+                print(f"  {ID} - {title} ({site_id}) has chapters, skipping")
+            else:
+                processable.append(Book(ID, title, site_id))
         else:
             print(f"  {ID} - {title} ({site_id}) already in libby path")
 
-    if unrecorded:
+    if processable:
         print(f"---------------------------------------------------------------")
 
-    IDs_in_tmp = {fn.name for fn in tmp_base.iterdir() if fn.is_dir()}
-    IDs_in_both = {ID for ID in IDs_in_tmp if (final:=(libby_dest / ID)).is_dir() and any(final.glob('*.mp3'))}
-    IDs_in_tmp -= IDs_in_both
-    for book in unrecorded:
+    IDs_in_tmp = set()
+    if opts.chapters:
+        IDs_in_tmp = {fn.name for fn in tmp_base.iterdir() if fn.is_dir() and not (fn/'chs.json').is_file()}
+    else:
+        IDs_in_tmp = {fn.name for fn in tmp_base.iterdir() if fn.is_dir()}
+        IDs_in_both = {ID for ID in IDs_in_tmp if (final:=(libby_dest / ID)).is_dir() and any(final.glob('*.mp3'))}
+        IDs_in_tmp -= IDs_in_both
+    for book in processable:
         tmp_folder = tmp_base / book.ID
         bad_marker = tmp_folder / 'bad'
         mp3s_text = (tmp_folder.is_dir() and len(set(tmp_folder.glob('*.mp3')))) or "no"
@@ -278,11 +297,17 @@ def main():
     if IDs_in_tmp:
         print(f"---------------------------------------------------------------")
         # These are possibly expired from Libby checkout.
-        # TODO: should download metadata first instead of waiting for whole book to be downloaded.
         for ID in IDs_in_tmp:
             tmp_folder = tmp_base / ID
+            tmp_data = tmp_folder / 'info.json'
+            if tmp_data.is_file():
+                with tmp_data.open('r') as f:
+                    tmp_data = json.load(f)
+                title = tmp_data['title']
+            else:
+                title = "(title not present)"
             mp3s_text = len(set(tmp_folder.glob('*.mp3'))) or "no"
-            print(f"  {ID} - no longer present in Libby data - {mp3s_text} mp3s, cannot continue.")
+            print(f"  {ID} - {title} - {mp3s_text} mp3s, cannot continue.")
 
     if any(missing_books):
         print("site-ids:", site_ids)
@@ -291,13 +316,13 @@ def main():
         if all(missing_books):
             sys.exit(2)
 
-    if not unrecorded:
+    if not processable:
         print(f"{len(books)} checkedout books scanned but already present, nothing to do, exiting.")
         sys.exit(0)
 
     print(f"====================== Beginning run =======================")
 
-    for book in unrecorded:
+    for book in processable:
         print(f"\nRunning odmpy-ng for book: {book.title}")
         tmp_folder = tmp_base / book.ID
         dl_folder = download_base / 'libby' / book.ID
@@ -310,8 +335,10 @@ def main():
         proc = None
 
         try:
+            # Small new feature: get metadata (for now) just pulls metadata and exists.
+            extra_options = '' if not opts.chapters else '--get-metadata'
             # Stream output live and collect it
-            proc = subprocess.Popen(f"docker compose run --rm odmpy-ng -s={book.site_id} -i={book.ID} -n=libby/{book.ID} -r",
+            proc = subprocess.Popen(f"docker compose run --rm odmpy-ng {extra_options} -s={book.site_id} -i={book.ID} -n=libby/{book.ID} -r",
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1,
                                 cwd='./odmpy-ng', shell=True, text=True, env=env)
             if proc is None or proc.stdout is None or proc.stderr is None:
@@ -364,6 +391,8 @@ def main():
                     badfile = tmp_folder / 'bad'
                     print("Marking tmp folder as bad, previous downloads made but no progress this time:", badfile)
                     badfile.touch()
+            else:
+                print(f"odmload complete for book {book.ID}: {book.title}.")
 
 if __name__ == '__main__':
     main()
