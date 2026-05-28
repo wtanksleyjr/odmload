@@ -83,12 +83,10 @@ def build_docker(download_base: Path, tmp_base: Path) -> dict[str, str]:
     env["COMPOSE_BAKE"] = "true"
 
     # Have odmpy-ng run build-compose.py to make its docker image.
-    res = subprocess.check_output(f'./build-compose.py', shell=True, text=True, env=env, cwd='./odmpy-ng')
-    lastline = res.splitlines()[-1]
-    if not lastline.startswith('@'):
+    res = subprocess.check_call(f'./build-compose.py', shell=True, text=True, env=env, cwd='./odmpy-ng')
+    if res != 0:
         print(f"Error running build-compose.py, output: {res}")
         sys.exit(1)
-    env["SELENIUM_SHA"] = lastline
 
     return env
 
