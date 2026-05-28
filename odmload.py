@@ -1,7 +1,16 @@
 #!/bin/python3
+# /// script
+# dependencies = [
+#   "docker",
+#   "odmpy",
+# ]
+# [tool.uv.sources]
+# odmpy = { path = "./odmpy", editable = true }
+# ///
 
 import sys, os, time
 import json
+import docker
 import argparse
 import subprocess
 from io import StringIO
@@ -70,7 +79,7 @@ def making_progress(tmp_folder: Path, dl_folder: Path, book: Book, verbose: bool
             f.write('\n'.join(older_files))
     return progress
 
-def build_docker(download_base: Path, tmp_base: Path) -> dict[str, str]:
+def build_docker(download_base: Path, tmp_base: Path, rebuild: bool) -> dict[str, str]:
     # Set up environment for docker run.
     UID = os.getuid()
     GID = os.getgid()
@@ -82,11 +91,16 @@ def build_docker(download_base: Path, tmp_base: Path) -> dict[str, str]:
     env["AUDIOBOOK_TMP"] = str(tmp_base)
     env["COMPOSE_BAKE"] = "true"
 
-    # Have odmpy-ng run build-compose.py to make its docker image.
-    res = subprocess.check_call(f'./build-compose.py', shell=True, text=True, env=env, cwd='./odmpy-ng')
-    if res != 0:
-        print(f"Error running build-compose.py, output: {res}")
-        sys.exit(1)
+    # see if a rebuild-and-quit was requested, or if there's no docker image named odmpy-ng.
+    if rebuild or not docker.from_env().images.get('odmpy-ng'):
+        # Have odmpy-ng run build-compose.py to make its docker image.
+        res = subprocess.check_call(f'./build-compose.py', shell=True, text=True, env=env, cwd='./odmpy-ng')
+        if res != 0:
+            print(f"Error running build-compose.py, output: {res}")
+            sys.exit(1)
+        # only quit if the user requested a rebuild.
+        if rebuild:
+            sys.exit(0)
 
     return env
 
@@ -191,15 +205,17 @@ def main():
         default=default_tmp,
         help=f'Directory under which temporary files will be stored, AUDIOBOOK_TMP environment variable={default_tmp} will be used if not set'
     )
+    # Add an optional argument to do a Docker rebuild.
+    args.add_argument('--rebuild', action='store_true', help='have odmpy-ng rebuild its docker image and quit', default=False)
     # Add an optional argument to generate the odmpy-ng config file.
-    args.add_argument('configure', type=str, help='supress run, generate odmpy-ng configuration instead', default=None, nargs='?')
+    args.add_argument('--configure', type=str, help='generate odmpy-ng configuration and quit', default=None)
 
     # parse
     opts = args.parse_args()
 
     cards, books = load_libby()
 
-    if opts.configure is not None:
+    if opts.configure:
         print(f"Generating odmpy-ng configuration to file {opts.configure}")
         generate_config(Path(config_loc), cards)
         sys.exit(0)
@@ -245,9 +261,7 @@ def main():
         print(f"Warning: libby path {libby_dest} is not a directory, attempting to create")
         libby_dest.mkdir(parents=True)
 
-    # TODO: this doesn't display its output until complete, figure out why.
-    # Note that the regular run DOES display, so I have a working solution.
-    env = build_docker(download_base, tmp_base)
+    env = build_docker(download_base, tmp_base, opts.rebuild)
 
     processable = []
     missing_books = []

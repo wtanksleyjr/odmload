@@ -17,7 +17,7 @@ your own libraries. As I mentioned, you will need to be able to log in; this is
 usually something simple like your library card number and the last 4-5 digits
 of your phone number, but your library staff will help you.
 
-Make sure you have Docker, Docker Compose, and Python installed. These
+Make sure you have Docker, Docker Compose, 'uv', and Python installed. These
 instructions will assume you're using a Git supported command line; if you're
 using Windows, you may want to use the Git Bash command line. I'll wait for you
 to get that all done, and my apologies that you may have to dig a bit.
@@ -51,10 +51,12 @@ as well as odmpy-ng, which can actually fetch the books.
 git submodule update --init --recursive
 ```
 
-Use pip to install odmpy from the submodule of the same name. Even if you have
-a patched version running this update is needed to get library websiteIds.
+Next, do the basic build and install of odmpy and odmpy-ng. Due to 'uv' this
+will also install any dependencies, including odmpy which is needed for the
+next step. (The -e marks the directory as editable, useful for development.)
 ```bash
-python3 -m pip install ./odmpy
+uv pip install -e ./odmpy
+uv run ./odmload.py --rebuild
 ```
 
 You'll now need your Libby authentication code. Open a browser and go to your
@@ -69,9 +71,12 @@ list of books.
 
 Your libby code may time out ... if so, just run it again. No worries.
 
+Occasionally libby will lose your login, and you'll need to run this step
+again.
+
 ```bash
-odmpy libby --reset
-odmpy libby
+uv run odmpy libby --reset
+uv run odmpy libby
 ```
 
 Next, create a config file for odmpy-ng. If you've run odmpy-ng on its own
@@ -83,7 +88,7 @@ something there, make sure you have a safe copy.
 
 Next, we'll run the configuration tool:
 ```bash
-./odmload.py configure
+./odmload.py --configure odmpy-ng/config/config.json
 ```
 
 Once that finishes, edit odmpy-ng/config/config.json and make sure you set the
@@ -108,6 +113,6 @@ wrong, it'll keep the files in your tmp folder, including a log file. It'll try
 again the next time you run it, but if it fails twice in a row, it'll give up
 and mark the tmp folder with a file named `bad`.
 ```bash
-./odmload.py
+uv run ./odmload.py
 ```
 
