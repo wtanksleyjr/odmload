@@ -67,7 +67,8 @@ link](https://libbyapp.com/interview/authenticate/setup-code#enterCode).
 With that code in mind, run odmpy to get the list of books you have checked
 out. If it isn't set up yet, not a problem; run it just like this and it will
 prompt you for the Libby code, and once it's all set up, it'll display your
-list of books.
+list of books (it will also ask you to choose a book, just press <enter> and
+ignore that; unfortunately odmpy doesn't work for book downloads anymore).
 
 Your libby code may time out ... if so, just run it again. No worries.
 
@@ -88,7 +89,7 @@ something there, make sure you have a safe copy.
 
 Next, we'll run the configuration tool:
 ```bash
-./odmload.py --configure odmpy-ng/config/config.json
+uv run ./odmload.py --configure odmpy-ng/config/config.json
 ```
 
 Once that finishes, edit odmpy-ng/config/config.json and make sure you set the
