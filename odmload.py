@@ -45,6 +45,12 @@ def load_libby() -> tuple[list[Card], list[dict]]:
         sys.exit(1)
     with open(libby_loc, 'r') as f:
         card_data = json.load(f)
+    
+
+    # Some library cards, as fetched by odmpy, don't have cardName field. We
+    # should handle this, but for now we just filter them out.
+    card_data = filter(lambda card: "cardName" in card, card_data)
+
     cards = [Card(name=c["advantageKey"], username=c["cardName"], site_id=int(c["library"]["websiteId"])) for c in card_data]
     with open(loans_loc, 'r') as f:
         loans = json.load(f)
