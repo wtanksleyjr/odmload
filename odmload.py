@@ -115,7 +115,7 @@ def generate_config(config_path: Path, cards: list[Card]):
     if config_path.is_file():
         with config_path.open('r') as f:
             config = json.load(f)
-        if not 'libraries' in config or not isinstance(config['libraries'], list):
+        if 'libraries' not in config or not isinstance(config['libraries'], list):
             print(f"Error: config file {config_path} does not contain libraries list, is this an odmpy-ng config file?")
             sys.exit(1)
         print(f"Using existing config file {config_path} with {len(config)} options")
@@ -132,7 +132,7 @@ def generate_config(config_path: Path, cards: list[Card]):
             added_options += 1
             config[key] = config_baseline[key]
 
-    older = {lib['url'].lower():lib for lib in config['libraries']}
+    older = {lib['url'].lower():lib for lib in (config.get('libraries') or [])}
     config['libraries'] = libs = []
     unintialized = 'replace_this_with_quoted_pin'
     added_libraries = 0
