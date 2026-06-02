@@ -56,8 +56,9 @@ will also install any dependencies, including odmpy which is needed for the
 next step. (The -e marks the directory as editable, useful for development.)
 ```bash
 uv pip install -e ./odmpy
-uv run ./odmload.py --rebuild
 ```
+
+the odmpy-ng image cannot be built until libby is set up
 
 You'll now need your Libby authentication code. Open a browser and go to your
 own Libby config page and choose "Copy to another device", then choose one of
@@ -80,6 +81,9 @@ uv run odmpy libby --reset
 uv run odmpy libby
 ```
 
+Odmpy will retrieve your loans and list them after login. However, it will fail
+to retrieve files, because the config file is missing.
+
 Next, create a config file for odmpy-ng. If you've run odmpy-ng on its own
 before, you'll want to copy the config file from the previous run; put it into
 odmpy-ng/config/config.json. Don't worry if you don't have one.
@@ -94,18 +98,34 @@ uv run ./odmload.py --configure odmpy-ng/config/config.json
 
 Once that finishes, edit odmpy-ng/config/config.json and make sure you set the
 login pins for each library (your librarians should be helpful here). Also, you
-may also want to set some of the encoding options, I always get all of the
-extra metadata, and I also prefer to skip reencoding because it takes a long
-time (so that's the least tested part for me).
-
-We're almost there. Now prepare two folders; one a temporary folder for in-progress
-downloads, and one for completed downloads. I simply point this app to the same folder
-all of my Audibookshelf collections are in; because this app saves each book in a path
-that looks like `libby/<id>/...`, the Libby books don't get mixed up with other sources.
+may also want to set some of the encoding options, I always get all of the extra
+metadata, and I also prefer to skip reencoding because it takes a long time (so
+that's the least tested part for me). Now identify the folders where your
+downloaded files will be stored; one a temporary folder for in-progress
+downloads, and one for completed downloads. You can pass these as arguments
+directly to `odmload.py` using the `-d` and `-t` arguments or set environment
+variables as follows:
 
 ```bash
 export AUDIOBOOK_TMP=/your/path/to/a/folder
 export AUDIOBOOK_FOLDER=/a/path/to/plenty/of/space
+```
+
+Make sure these folders are created before proceeding. Only now, with the configuration file in
+place, will the docker image build successfully.
+
+```bash
+uv run ./odmload.py --rebuild -d ./books -t ./temp
+```
+
+Running with the `--rebuild` argument will not download any files, but it will
+create a docker image on your system with the tag `odmpy-ng:dev`. You can delete
+this image with `docker image rm` at any time and re-create it. With that image
+built, the following command will scrape your libraries for new loans and
+attempt to download them.
+
+```bash
+uv run ./odmload.py
 ```
 
 Go to libby and check out some books. Run the app and it will download them! If
@@ -113,7 +133,12 @@ the download works, it'll show up in your download folder. If something goes
 wrong, it'll keep the files in your tmp folder, including a log file. It'll try
 again the next time you run it, but if it fails twice in a row, it'll give up
 and mark the tmp folder with a file named `bad`.
-```bash
-uv run ./odmload.py
-```
+
+We're almost there. Now prepare two folders; one a temporary folder for
+in-progress downloads, and one for completed downloads. I simply point this app
+to the same folder all of my Audibookshelf collections are in; because this app
+saves each book in a path that looks like `libby/<id>/...`, the Libby books
+don't get mixed up with other sources.
+
+
 
