@@ -98,7 +98,7 @@ def build_docker(download_base: Path, tmp_base: Path, rebuild: bool) -> dict[str
     env["COMPOSE_BAKE"] = "true"
 
     # see if a rebuild-and-quit was requested, or if there's no docker image named odmpy-ng.
-    if rebuild or not docker.from_env().images.get('odmpy-ng'):
+    if rebuild or not docker.from_env().images.get('odmpy-ng:dev'):
         # Have odmpy-ng run build-compose.py to make its docker image.
         res = subprocess.check_call(f'./build-compose.py', shell=True, text=True, env=env, cwd='./odmpy-ng')
         if res != 0:
