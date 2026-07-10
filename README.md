@@ -1,6 +1,8 @@
 # odmload
 Dockerized Over Drive Loader
 
+# WARNING: this project has become obsolete, please check https://github.com/wtanksleyjr/odmpy-ng/ which should be a complete replacement.
+
 ## Purpose
 
 odmload is a dockerized tool for downloading audiobooks from Over Drive. It's
