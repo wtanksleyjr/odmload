@@ -45,6 +45,12 @@ def load_libby() -> tuple[list[Card], list[dict]]:
         sys.exit(1)
     with open(libby_loc, 'r') as f:
         card_data = json.load(f)
+    
+
+    # Some library cards, as fetched by odmpy, don't have cardName field. We
+    # should handle this, but for now we just filter them out.
+    card_data = filter(lambda card: "cardName" in card, card_data)
+
     cards = [Card(name=c["advantageKey"], username=c["cardName"], site_id=int(c["library"]["websiteId"])) for c in card_data]
     with open(loans_loc, 'r') as f:
         loans = json.load(f)
@@ -92,7 +98,7 @@ def build_docker(download_base: Path, tmp_base: Path, rebuild: bool) -> dict[str
     env["COMPOSE_BAKE"] = "true"
 
     # see if a rebuild-and-quit was requested, or if there's no docker image named odmpy-ng.
-    if rebuild or not docker.from_env().images.get('odmpy-ng'):
+    if rebuild or not docker.from_env().images.get('odmpy-ng:dev'):
         # Have odmpy-ng run build-compose.py to make its docker image.
         res = subprocess.check_call(f'./build-compose.py', shell=True, text=True, env=env, cwd='./odmpy-ng')
         if res != 0:
@@ -109,7 +115,7 @@ def generate_config(config_path: Path, cards: list[Card]):
     if config_path.is_file():
         with config_path.open('r') as f:
             config = json.load(f)
-        if not 'libraries' in config or not isinstance(config['libraries'], list):
+        if 'libraries' not in config or not isinstance(config['libraries'], list):
             print(f"Error: config file {config_path} does not contain libraries list, is this an odmpy-ng config file?")
             sys.exit(1)
         print(f"Using existing config file {config_path} with {len(config)} options")
@@ -126,7 +132,7 @@ def generate_config(config_path: Path, cards: list[Card]):
             added_options += 1
             config[key] = config_baseline[key]
 
-    older = {lib['url'].lower():lib for lib in config['libraries']}
+    older = {lib['url'].lower():lib for lib in (config.get('libraries') or [])}
     config['libraries'] = libs = []
     unintialized = 'replace_this_with_quoted_pin'
     added_libraries = 0
